@@ -1,0 +1,77 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{grffile}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric}
+\title{Informe de Software del TP2}
+\author{Equipo de Desarrollo}
+\date{\today}
+\begin{document}
+\maketitle
+\section{Introducción}
+Este informe describe el firmware para el microcontrolador STM32 y la interfaz de usuario desarrollada en Qt. El objetivo es implementar un instrumento virtual que adquiere datos analógicos, temperatura y presión, además de controlar salidas digitales y PWM.
+\section{Firmware para STM32}
+El proyecto se organiza en el directorio\linebreak \texttt{Firmware/TP3\_STM32\_FreeRtos}. El núcleo principal se encuentra en \texttt{Core/Src} y se apoya en FreeRTOS.
+\subsection{Inicialización y tareas}
+\begin{itemize}
+  \item \textbf{main.c}: punto de entrada. Configura relojes, periféricos (GPIO, DMA, ADC, SPI, UART y temporizadores) y selecciona el modo de comunicación (TTL o Modbus) según un pin de entrada.
+  \item \textbf{freertos.c}: define y crea las tareas del sistema. Entre ellas: lectura de entradas digitales, adquisición del ADC, lectura del sensor BMP280, gestión de la comunicación serie y envío periódico de tramas a la PC.
+\end{itemize}
+\subsection{Periféricos y drivers}
+\begin{itemize}
+  \item \textbf{gpio.c}, \textbf{tim.c}, \textbf{usart.c}, \textbf{dma.c} y \textbf{spi.c}: inicializan los periféricos correspondientes mediante la HAL.
+  \item \textbf{stm32f1xx\_hal\_msp.c}, \textbf{stm32f1xx\_hal\_timebase\_tim.c} y \textbf{stm32f1xx\_it.c}: rutinas de soporte y de interrupciones específicas del microcontrolador.
+  \item \textbf{syscalls.c} y \textbf{sysmem.c}: funciones de sistema para la biblioteca estándar.
+\end{itemize}
+\subsection{Sensores y comunicación}
+\begin{itemize}
+  \item \textbf{bmp280\_spi.c}: maneja el sensor de presión y temperatura BMP280 mediante SPI. Se realizan lecturas compensadas utilizando los coeficientes de calibración internos.
+  \item \textbf{comunicacion.c} y \textbf{comunicacion.h}: implementan la recepción de tramas por UART. Soportan un modo TTL con tramas de longitud fija y un modo Modbus/RS485 con ventana de silencio t\(3.5\).
+  \item \textbf{adc.c}: configura el ADC para obtener tres canales analógicos.
+\end{itemize}
+\section{Diagrama de flujo}
+La Figura~\ref{fig:flow} ilustra el flujo principal del firmware.
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[node distance=1.6cm]
+  \tikzstyle{block}=[rectangle, rounded corners, draw, align=center, minimum width=6cm]
+  \tikzstyle{line}=[-Latex]
+  \node[block] (start) {Inicio};
+  \node[block, below=of start] (init) {Inicializa hardware};
+  \node[block, below=of init] (tasks) {Crea tareas FreeRTOS};
+  \node[block, below left=1.2cm and -1cm of tasks] (sensors) {Leer ADC y BMP280};
+  \node[block, below right=1.2cm and -1cm of tasks] (comm) {Gestionar UART y protocolo};
+  \node[block, below=3.2cm of tasks] (frame) {Enviar trama a PC};
+  \node[block, below=of frame] (loop) {Espera/Loop};
+  \draw[line] (start) -- (init);
+  \draw[line] (init) -- (tasks);
+  \draw[line] (tasks) -- (sensors);
+  \draw[line] (tasks) -- (comm);
+  \draw[line] (sensors) -- (frame);
+  \draw[line] (comm) -- (frame);
+  \draw[line] (frame) -- (loop);
+  \draw[line] (loop.north) |- (tasks);
+\end{tikzpicture}
+\caption{Flujo general del firmware.}
+\label{fig:flow}
+\end{figure}
+\section{Esquemático}
+La Figura~\ref{fig:sch} muestra el diagrama esquemático de la placa utilizada.
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\textwidth]{../02_Hardware/TD3_TP2_Placa-de-desarrollo/04_Release/UTN-FRC_TD3_Instrumento\ virtual\ con\ STM32_sch_Rev\ C.pdf}
+    \caption{Esquemático general del sistema.}
+    \label{fig:sch}
+\end{figure}
+\section{Interfaz de Usuario en Qt}
+El directorio \texttt{UI} contiene la aplicación gráfica multiplataforma.
+\begin{itemize}
+  \item \textbf{mainwindow.h / mainwindow.cpp}: definen la ventana principal. Gestiona la conexión serie, envía tramas de control con máscaras de salidas y valores PWM, y muestra los datos recibidos (ADC, temperatura, presión e indicadores de entradas).
+  \item \textbf{mainwindow.ui}: archivo generado por el diseñador de Qt que describe el layout con controles para salidas digitales, sliders de PWM, displays LCD y una consola de datos en crudo.
+  \item \textbf{main.cpp}: punto de entrada de la aplicación Qt, inicia \texttt{QApplication} y muestra la \texttt{MainWindow}.
+\end{itemize}
+\section{Conclusión}
+El sistema integra un firmware basado en FreeRTOS con múltiples tareas para adquisición y comunicación, junto con una interfaz Qt que permite monitorear y controlar la placa desde un PC.
+\end{document}
