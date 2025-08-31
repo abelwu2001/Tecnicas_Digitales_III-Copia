@@ -94,9 +94,11 @@ En esta sección se presenta un panorama detallado de cada archivo relevante del
   \item[\texttt{stm32f1xx\_it.c}] Rutinas de servicio a interrupciones, incluyendo las de UART, DMA y temporizadores. En la interrupción de recepción se colocan los datos en la cola \texttt{UART\_RX\_Queue}.
   \item[\texttt{syscalls.c} y \texttt{sysmem.c}] Funciones de soporte requeridas por la biblioteca estándar, tales como gestión de memoria y escritura por defecto.
   \item[\texttt{system\_stm32f1xx.c}] Configuración de bajo nivel del sistema y de los relojes (función \texttt{SystemInit}).
-  \item[\texttt{bmp280\_spi.c}] Driver específico del sensor BMP280. Implementa la lectura de coeficientes de calibración y funciones para obtener temperatura y presión compensadas.
-  \item[\texttt{comunicacion.c} y \texttt{comunicacion.h}] Implementan el protocolo de comunicación con la PC. Soportan dos modos: TTL con trama fija de 12 bytes y Modbus/RS485 con manejo del tiempo de silencio. Incluyen funciones de cálculo de CRC-16 y de envío por RS485.
+\item[\texttt{bmp280\_spi.c}] Driver específico del sensor BMP280. Implementa la lectura de coeficientes de calibración y funciones para obtener temperatura y presión compensadas.
+\item[\texttt{comunicacion.c} y \texttt{comunicacion.h}] Implementan el protocolo de comunicación con la PC. Soportan dos modos: TTL con trama fija de 12 bytes y Modbus/RS485 con manejo del tiempo de silencio. Incluyen funciones de cálculo de CRC-16 y de envío por RS485.
 \end{description}
+\subsubsection{Detalle de \texttt{main.c}}
+El archivo principal orquesta la puesta en marcha del microcontrolador. Tras inicializar los relojes y periféricos, consulta el pin \texttt{MODBUS\_SEL} para decidir si se utilizará una comunicación TTL o un enlace RS485. En el primer caso habilita la recepción por \texttt{USART1} y desactiva el transceptor externo; en el segundo inicializa \texttt{USART3}, gestiona los retardos del bus e inhibe la transmisión hasta que se cumpla el silencio requerido. A continuación arranca los canales PWM y el conversor ADC mediante DMA y finalmente invoca a \texttt{MX\_FREERTOS\_Init} para crear las tareas del sistema.
 
 \subsection{Tareas FreeRTOS}
 El sistema define múltiples tareas concurrentes:
@@ -200,6 +202,9 @@ La carpeta \texttt{UI} contiene una aplicación desarrollada con Qt que permite 
 \end{itemize}
 
 Los eventos de la interfaz se manejan mediante el sistema de señales y slots de Qt. Al mover un slider se emite una señal que actualiza el campo correspondiente de la trama de salida, mientras que un \texttt{QTimer} dispara periódicamente el envío de dicha trama. Cuando llegan datos por el puerto serie, el slot conectado a \texttt{readyRead()} interpreta la respuesta, verifica el CRC y actualiza los widgets visibles.
+
+\subsection{Detalle de \texttt{mainwindow.cpp}}
+El constructor de la ventana principal configura los rangos de los controles, enumera los puertos serie disponibles y establece las conexiones entre señales y \textit{slots}. La función \texttt{on\_btnConnect\_clicked} abre o cierra el puerto configurando baudrate, paridad y control de flujo antes de iniciar un temporizador de sondeo. Las tramas recibidas se acumulan en un \textit{buffer} circular y se validan mediante un CRC16; al ser correctas, \texttt{processFrame} extrae los valores de los ADC, entradas digitales y medidas del BMP280 para mostrarlos en los widgets. Del lado de la transmisión, \texttt{sendControlFrame} empaqueta el estado de las salidas y los registros PWM, adjunta el CRC y envía la trama por el puerto abierto.
 
 \subsection{Flujo de comunicación}
 Cuando el usuario habilita el puerto serie, la aplicación envía periódicamente una trama con el estado deseado de las salidas y los valores PWM. Al recibir una respuesta válida, se actualizan los indicadores de entradas digitales, los displays del ADC y las mediciones de temperatura y presión. El diseño desacopla la lógica de comunicación de la presentación para facilitar futuras extensiones.
