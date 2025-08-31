@@ -20,6 +20,50 @@
 El presente informe documenta en detalle el desarrollo del software del Trabajo Práctico~2 de la cátedra de Técnicas Digitales~III. El objetivo del proyecto es construir un instrumento virtual que permita la adquisición de señales analógicas, el sensado de temperatura y presión y el control de salidas digitales y analógicas desde una computadora personal.\\
 Se emplea un microcontrolador STM32F103 que interactúa con sensores y actuadores a través de diversos periféricos. El firmware se estructura con el sistema operativo en tiempo real FreeRTOS, mientras que la interfaz de usuario se implementa en Qt para facilitar la visualización y el control remoto. Este documento está dividido en dos grandes partes: la descripción del firmware embebido y la aplicación de escritorio.
 
+\section{Enunciado y Requerimientos}
+El Trabajo Práctico~2 propone el desarrollo de un sistema embebido basado en la placa BluePill con microcontrolador STM32F103. El objetivo general es integrar adquisición de datos, procesamiento y comunicaciones en un módulo de bajo costo que funcione de manera autónoma y pueda interactuar con una PC.
+
+\subsection{Objetivos}
+\begin{enumerate}
+    \item Capturar los requerimientos del sistema y registrarlos en una matriz de validación.
+    \item Definir el protocolo de comunicaciones serie asíncrono con verificación por CRC.
+    \item Interactuar con el sensor BMP280 a través de SPI y permitir su configuración.
+    \item Adquirir y transferir datos analógicos y digitales.
+    \item Controlar salidas digitales y dos canales PWM de 12~bits.
+    \item Diseñar un sistema autónomo con fuente de alimentación y montaje robusto.
+    \item Documentar la arquitectura, el diseño y los procedimientos de validación.
+\end{enumerate}
+
+\subsection{Requerimientos de alto nivel}
+\begin{center}
+\begin{tabular}{|c|c|}
+\hline
+\textbf{Parámetro} & \textbf{Valor} \\ \hline
+Voltaje analógico ($V_{analógico}$) & 0--5~V \\ \hline
+Frecuencia de muestreo analógica ($B_{Analógico}$) & 10~kHz \\ \hline
+Baud Rate & 115200 \\ \hline
+Entrada/Salida Digital & 5~V \\ \hline
+Frecuencia PWM ($F_{PWM}$) & 20~kHz \\ \hline
+Voltaje PWM ($V_{PWM}$) & 5~V \\ \hline
+Resolución PWM & 12~bits \\ \hline
+Resolución ADC & 12~bits \\ \hline
+\end{tabular}
+\end{center}
+
+\subsection{Etapas del Proyecto}
+Las principales actividades del TP2 fueron:
+\begin{itemize}
+    \item Captura de requerimientos y elaboración de la matriz de validación.
+    \item Diseño de la arquitectura de hardware y de software.
+    \item Documentación detallada del diseño y de los procedimientos de ensayo.
+    \item Implementación y pruebas del sistema embebido y de la interfaz de usuario.
+\end{itemize}
+
+La documentación generada incluye: (i) Documento de requerimientos, (ii) Arquitectura de hardware y software, (iii) Documento de diseño, (iv) Documento de validación y (v) Matriz de validación.
+
+\subsection{Presentación y Evaluación}
+El proyecto se evalúa mediante una demostración funcional del equipo y un coloquio oral. Durante la presentación se podrá solicitar la verificación de cualquiera de los requerimientos definidos, por lo que la documentación debe reflejar con precisión la implementación realizada.
+
 \section{Arquitectura General}
 La Figura~\ref{fig:sch} ilustra el hardware base del sistema. El microcontrolador de la familia STM32 se conecta por SPI al sensor barométrico BMP280, por UART a la computadora (vía conversor USB--TTL o RS485) y dispone de entradas analógicas y digitales para monitorear el entorno. La aplicación en PC establece una comunicación periódica en la que recibe mediciones y envía comandos para accionar salidas digitales y modificar el ciclo útil de señales PWM.
 
