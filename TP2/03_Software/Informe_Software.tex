@@ -1,0 +1,216 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage[spanish]{babel}
+\usepackage{graphicx}
+\usepackage{grffile}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric}
+\usepackage{hyperref}
+
+\title{Informe de Software del TP2}
+\author{Equipo de Desarrollo}
+\date{\today}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\section{Introducción}
+El presente informe documenta en detalle el desarrollo del software del Trabajo Práctico~2 de la cátedra de Técnicas Digitales~III. El objetivo del proyecto es construir un instrumento virtual que permita la adquisición de señales analógicas, el sensado de temperatura y presión y el control de salidas digitales y analógicas desde una computadora personal.\\
+Se emplea un microcontrolador STM32F103 que interactúa con sensores y actuadores a través de diversos periféricos. El firmware se estructura con el sistema operativo en tiempo real FreeRTOS, mientras que la interfaz de usuario se implementa en Qt para facilitar la visualización y el control remoto. Este documento está dividido en dos grandes partes: la descripción del firmware embebido y la aplicación de escritorio.
+
+\section{Enunciado y Requerimientos}
+El Trabajo Práctico~2 propone el desarrollo de un sistema embebido basado en la placa BluePill con microcontrolador STM32F103. El objetivo general es integrar adquisición de datos, procesamiento y comunicaciones en un módulo de bajo costo que funcione de manera autónoma y pueda interactuar con una PC.
+
+\subsection{Objetivos}
+\begin{enumerate}
+    \item Capturar los requerimientos del sistema y registrarlos en una matriz de validación.
+    \item Definir el protocolo de comunicaciones serie asíncrono con verificación por CRC.
+    \item Interactuar con el sensor BMP280 a través de SPI y permitir su configuración.
+    \item Adquirir y transferir datos analógicos y digitales.
+    \item Controlar salidas digitales y dos canales PWM de 12~bits.
+    \item Diseñar un sistema autónomo con fuente de alimentación y montaje robusto.
+    \item Documentar la arquitectura, el diseño y los procedimientos de validación.
+\end{enumerate}
+
+\subsection{Requerimientos de alto nivel}
+\begin{center}
+\begin{tabular}{|c|c|}
+\hline
+\textbf{Parámetro} & \textbf{Valor} \\ \hline
+Voltaje analógico ($V_{analógico}$) & 0--5~V \\ \hline
+Frecuencia de muestreo analógica ($B_{Analógico}$) & 10~kHz \\ \hline
+Baud Rate & 115200 \\ \hline
+Entrada/Salida Digital & 5~V \\ \hline
+Frecuencia PWM ($F_{PWM}$) & 20~kHz \\ \hline
+Voltaje PWM ($V_{PWM}$) & 5~V \\ \hline
+Resolución PWM & 12~bits \\ \hline
+Resolución ADC & 12~bits \\ \hline
+\end{tabular}
+\end{center}
+
+\subsection{Etapas del Proyecto}
+Las principales actividades del TP2 fueron:
+\begin{itemize}
+    \item Captura de requerimientos y elaboración de la matriz de validación.
+    \item Diseño de la arquitectura de hardware y de software.
+    \item Documentación detallada del diseño y de los procedimientos de ensayo.
+    \item Implementación y pruebas del sistema embebido y de la interfaz de usuario.
+\end{itemize}
+
+La documentación generada incluye: (i) Documento de requerimientos, (ii) Arquitectura de hardware y software, (iii) Documento de diseño, (iv) Documento de validación y (v) Matriz de validación.
+
+\subsection{Presentación y Evaluación}
+El proyecto se evalúa mediante una demostración funcional del equipo y un coloquio oral. Durante la presentación se podrá solicitar la verificación de cualquiera de los requerimientos definidos, por lo que la documentación debe reflejar con precisión la implementación realizada.
+
+\section{Arquitectura General}
+La Figura~\ref{fig:sch} ilustra el hardware base del sistema. El microcontrolador de la familia STM32 se conecta por SPI al sensor barométrico BMP280, por UART a la computadora (vía conversor USB--TTL o RS485) y dispone de entradas analógicas y digitales para monitorear el entorno. La aplicación en PC establece una comunicación periódica en la que recibe mediciones y envía comandos para accionar salidas digitales y modificar el ciclo útil de señales PWM.
+
+\section{Firmware para STM32}
+El código fuente del microcontrolador se encuentra en el directorio:\linebreak\texttt{Firmware/TP3\_STM32\_FreeRtos}. El núcleo funcional reside en \texttt{Core/Src} y se apoya en las bibliotecas HAL de ST y en FreeRTOS.
+
+\subsection{Estructura del proyecto}
+El directorio \texttt{Core/Src} contiene los archivos de aplicación, mientras que \texttt{Core/Inc} aloja los encabezados públicos. Los archivos de configuración generados por STM32CubeMX se combinan con módulos propios para sensores y protocolos.
+
+Además, el proyecto incorpora directorios auxiliares como \texttt{Drivers} (bibliotecas HAL y CMSIS), \texttt{Middlewares} y carpetas de recursos. La integración con FreeRTOS se realiza mediante los archivos generados por CubeMX y adaptados para utilizar mutexes, colas y tareas personalizadas, manteniendo un árbol de directorios ordenado que facilita el mantenimiento.
+
+\subsection{Descripción de archivos fuente}
+En esta sección se presenta un panorama detallado de cada archivo relevante del firmware:
+
+\begin{description}
+  \item[\texttt{main.c}] Punto de entrada de la aplicación. Configura los relojes, inicializa los periféricos (GPIO, DMA, ADC, SPI, UART y temporizadores) y selecciona el modo de comunicación (TTL directo o Modbus/RS485) según el estado de un pin de entrada. Tras la inicialización llama a \texttt{MX\_FREERTOS\_Init} para lanzar las tareas del sistema.
+  \item[\texttt{freertos.c}] Contiene la creación de mutexes, colas y seis tareas de FreeRTOS. Implementa el scheduler y la función \texttt{MX\_FREERTOS\_Init}. Incluye la cola de recepción de UART y los mutex que protegen la trama de salida y el bus compartido entre puertos serie.
+  \item[\texttt{comunicacion.c}] Implementa las rutinas de construcción y análisis de tramas, manejo del puerto RS485 y funciones de cálculo de CRC. Separa la lógica de protocolo de las tareas para mantener el código modular.
+  \item[\texttt{comunicacion.h}] Declara constantes de tamaño de trama, prototipos de funciones y tipos auxiliares para la comunicación.
+  \item[\texttt{gpio.c}] Configura pines de entrada y salida, incluyendo leds, entradas digitales y pines PWM. Define el modo de operación de cada pin y activa las resistencias de pull-up o pull-down según corresponda.
+  \item[\texttt{tim.c}] Inicializa los temporizadores utilizados para generar PWM y para el base de tiempos del sistema. Habilita los canales de \texttt{TIM3} para el control de dos salidas analógicas mediante modulación por ancho de pulso.
+  \item[\texttt{adc.c}] Configura el convertidor analógico-digital en modo de escaneo para tres canales. Los resultados son almacenados en el arreglo \texttt{adc\_valores} que luego es empaquetado en la trama de transmisión.
+  \item[\texttt{spi.c}] Inicializa la interfaz SPI2 empleada por el sensor BMP280 y ajusta sus parámetros (modo, velocidad de reloj y gestión del pin NSS).
+  \item[\texttt{usart.c}] Habilita los puertos \texttt{USART1} (TTL) y \texttt{USART3} (RS485). Configura velocidades, bits de datos, paridad y callbacks de interrupción para recepción.
+  \item[\texttt{dma.c}] Configura los canales DMA utilizados para mover datos del ADC y de las interfaces serie sin intervención constante del CPU.
+  \item[\texttt{stm32f1xx\_hal\_msp.c}] Funciones de inicialización de bajo nivel de la HAL, como la activación de relojes de periféricos y la asignación de pines alternativos.
+  \item[\texttt{stm32f1xx\_hal\_timebase\_tim.c}] Implementa la generación del tick del sistema usando un temporizador, reemplazando al SysTick estándar.
+  \item[\texttt{stm32f1xx\_it.c}] Rutinas de servicio a interrupciones, incluyendo las de UART, DMA y temporizadores. En la interrupción de recepción se colocan los datos en la cola \texttt{UART\_RX\_Queue}.
+  \item[\texttt{syscalls.c} y \texttt{sysmem.c}] Funciones de soporte requeridas por la biblioteca estándar, tales como gestión de memoria y escritura por defecto.
+  \item[\texttt{system\_stm32f1xx.c}] Configuración de bajo nivel del sistema y de los relojes (función \texttt{SystemInit}).
+\item[\texttt{bmp280\_spi.c}] Driver específico del sensor BMP280. Implementa la lectura de coeficientes de calibración y funciones para obtener temperatura y presión compensadas.
+\item[\texttt{comunicacion.c} y \texttt{comunicacion.h}] Implementan el protocolo de comunicación con la PC. Soportan dos modos: TTL con trama fija de 12 bytes y Modbus/RS485 con manejo del tiempo de silencio. Incluyen funciones de cálculo de CRC-16 y de envío por RS485.
+\end{description}
+\subsubsection{Detalle de \texttt{main.c}}
+El archivo principal orquesta la puesta en marcha del microcontrolador. Tras inicializar los relojes y periféricos, consulta el pin \texttt{MODBUS\_SEL} para decidir si se utilizará una comunicación TTL o un enlace RS485. En el primer caso habilita la recepción por \texttt{USART1} y desactiva el transceptor externo; en el segundo inicializa \texttt{USART3}, gestiona los retardos del bus e inhibe la transmisión hasta que se cumpla el silencio requerido. A continuación arranca los canales PWM y el conversor ADC mediante DMA y finalmente invoca a \texttt{MX\_FREERTOS\_Init} para crear las tareas del sistema.
+
+\subsection{Tareas FreeRTOS}
+El sistema define múltiples tareas concurrentes:
+\begin{itemize}
+  \item \textbf{Start\_EnvioUart\_Task}: empaqueta los datos en \texttt{mensaje\_de\_salida}, calcula el CRC y transmite la trama por el puerto correspondiente. Gestiona reintentos y arbitra el acceso mediante un mutex de transmisión.
+  \item \textbf{StartReadInputsTask}: lee las entradas digitales \texttt{DIN\_01} a \texttt{DIN\_03} y actualiza los bits correspondientes de la trama a enviar.
+  \item \textbf{StartLeerADC}: toma los valores convertidos del ADC y los inserta en la trama en formato little-endian.
+  \item \textbf{StartLeerBMP280}: inicializa el sensor BMP280 y cada segundo actualiza la temperatura y la presión en la trama transmitida.
+\item \textbf{Start\_LeerUart}: espera tramas provenientes de la PC en la cola \texttt{UART\_RX\_Queue}, verifica su CRC y, si son válidas, actualiza las salidas digitales y los registros de PWM.
+\item \textbf{StartDefaultTask}: tarea de bajo uso que se mantiene en espera; sirve como referencia para el estado ocioso del sistema.
+\end{itemize}
+
+Las tareas cooperan entre sí mediante mutexes que protegen los recursos compartidos, como el buffer de transmisión y el bus serie. Los retardos \texttt{osDelay} permiten ceder el procesador a otras tareas y mantener un consumo equilibrado de CPU.
+
+\subsection{Comunicación serie y protocolos}
+La comunicación con la computadora puede realizarse en dos modalidades:
+\begin{enumerate}
+  \item \textbf{Modo TTL}: utiliza \texttt{USART1} a 115200~bps y una trama de 12 bytes con cabecera, datos de entradas, valores del ADC y CRC. Es útil para conexión directa mediante un conversor USB--TTL.
+  \item \textbf{Modo Modbus/RS485}: emplea \texttt{USART3} y un transceptor RS485. Se respeta un tiempo de silencio de 3,5~caracteres entre tramas para cumplir con el estándar. El puerto se comparte con otras tareas mediante un mutex y se gestiona el cambio de dirección del transceptor para transmitir y recibir.
+\end{enumerate}
+
+La recepción se maneja mediante interrupciones que colocan las tramas en \texttt{UART\_RX\_Queue}. La tarea \texttt{Start\_LeerUart} procesa la cola, valida el CRC y actualiza las salidas PWM y digitales.
+
+\subsubsection{Formato de trama}
+La trama transmitida por el microcontrolador posee 12~bytes y se describe en la Tabla~\ref{tab:trama}. Los primeros seis bytes corresponden a las lecturas del ADC, luego sigue un byte de estados digitales y posteriormente los datos del BMP280. Finalmente se anexan dos bytes de CRC-16 calculado con el polinomio \texttt{0xA001}.
+
+\begin{table}[h!]
+\centering
+\begin{tabular}{|c|c|c|l|}
+\hline
+\textbf{Byte} & \textbf{Nombre} & \textbf{Descripción} & \textbf{Origen}\\ \hline
+0 & 0x02 & Inicio de trama & Constante\\ \hline
+1--2 & ADC0 & Valor canal 0 & ADC1\\ \hline
+3--4 & ADC1 & Valor canal 1 & ADC1\\ \hline
+5--6 & ADC2 & Valor canal 2 & ADC1\\ \hline
+7 & Entradas & Estado DIN\_01--03 & GPIO\\ \hline
+8 & Temp & Temperatura (°C) & BMP280\\ \hline
+9--10 & Presión & Presión (Pa/256) & BMP280\\ \hline
+11--12 & CRC & LSB/MSB & Cálculo CRC\\ \hline
+\end{tabular}
+\caption{Formato de la trama de transmisión.}
+\label{tab:trama}
+\end{table}
+
+\subsection{Sensores}
+El sistema cuenta con dos tipos de mediciones:
+\begin{itemize}
+  \item \textbf{Entradas analógicas}: tres canales del ADC1 miden tensiones externas. Se realizan conversiones periódicas y los resultados se envían a la PC en formato de 16~bits.
+  \item \textbf{Sensor BMP280}: conectado por SPI, proporciona temperatura y presión. El módulo \texttt{bmp280\_spi.c} compensa automáticamente las lecturas usando coeficientes internos.
+\end{itemize}
+
+\subsection{Manejo de interrupciones y soporte}
+El archivo \texttt{stm32f1xx\_it.c} centraliza las rutinas de interrupción. Las de UART alimentan la cola de recepción, mientras que las de DMA notifican la finalización de transferencias. Los archivos \texttt{syscalls.c} y \texttt{sysmem.c} ofrecen implementaciones mínimas para las funciones exigidas por la libc, y \texttt{system\_stm32f1xx.c} se encarga de la configuración de los relojes al inicio.
+
+\section{Diagrama de flujo}
+La Figura~\ref{fig:flow} resume el flujo principal de ejecución del firmware, desde la inicialización de hardware hasta el envío periódico de datos a la PC.
+
+\begin{figure}[h!]
+\centering
+\begin{tikzpicture}[node distance=1.6cm]
+  \tikzstyle{block}=[rectangle, rounded corners, draw, align=center, minimum width=6cm]
+  \tikzstyle{line}=[-Latex]
+  \node[block] (start) {Inicio};
+  \node[block, below=of start] (init) {Inicializa hardware};
+  \node[block, below=of init] (tasks) {Crea tareas FreeRTOS};
+  \node[block, below left=1.2cm and -1cm of tasks] (sensors) {Leer ADC y BMP280};
+  \node[block, below right=1.2cm and -1cm of tasks] (comm) {Gestionar UART y protocolo};
+  \node[block, below=3.2cm of tasks] (frame) {Enviar trama a PC};
+  \node[block, below=of frame] (loop) {Espera/Loop};
+  \draw[line] (start) -- (init);
+  \draw[line] (init) -- (tasks);
+  \draw[line] (tasks) -- (sensors);
+  \draw[line] (tasks) -- (comm);
+  \draw[line] (sensors) -- (frame);
+  \draw[line] (comm) -- (frame);
+  \draw[line] (frame) -- (loop);
+  \draw[line] (loop.north) |- (tasks);
+\end{tikzpicture}
+\caption{Flujo general del firmware.}
+\label{fig:flow}
+\end{figure}
+
+\section{Esquemático}
+El esquema eléctrico completo se muestra en la Figura~\ref{fig:sch}. El microcontrolador se alimenta a 3{,}3~V y dispone de conectores para programación, entradas analógicas, entradas digitales con filtros RC y salidas PWM. El transceptor RS485 se conecta al puerto \texttt{USART3} y el sensor BMP280 se ubica en la línea SPI2 con un pin de chip select dedicado.
+
+\begin{figure}[h!]
+    \centering
+    \includegraphics[width=0.9\textwidth]{../02_Hardware/TD3_TP2_Placa-de-desarrollo/04_Release/UTN-FRC_TD3_Instrumento virtual con STM32_sch_Rev C.pdf}
+    \caption{Esquemático general del sistema.}
+    \label{fig:sch}
+\end{figure}
+
+\section{Interfaz de Usuario en Qt}
+La carpeta \texttt{UI} contiene una aplicación desarrollada con Qt que permite interactuar con la placa desde un entorno gráfico.
+
+\subsection{Arquitectura de la aplicación}
+\begin{itemize}
+  \item \textbf{main.cpp}: instancia \texttt{QApplication} y muestra la ventana principal.
+  \item \textbf{mainwindow.h} / \textbf{mainwindow.cpp}: definen la clase \texttt{MainWindow}. Gestionan la apertura del puerto serie mediante \texttt{QSerialPort}, construyen las tramas de comando y procesan los datos recibidos para actualizarlos en la interfaz.
+  \item \textbf{mainwindow.ui}: archivo generado por Qt Designer que organiza los widgets. Incluye indicadores LED, botones para salidas digitales, barras deslizantes para PWM, displays LCD para valores numéricos y una consola que muestra el contenido crudo de las tramas.
+\end{itemize}
+
+Los eventos de la interfaz se manejan mediante el sistema de señales y slots de Qt. Al mover un slider se emite una señal que actualiza el campo correspondiente de la trama de salida, mientras que un \texttt{QTimer} dispara periódicamente el envío de dicha trama. Cuando llegan datos por el puerto serie, el slot conectado a \texttt{readyRead()} interpreta la respuesta, verifica el CRC y actualiza los widgets visibles.
+
+\subsection{Detalle de \texttt{mainwindow.cpp}}
+El constructor de la ventana principal configura los rangos de los controles, enumera los puertos serie disponibles y establece las conexiones entre señales y \textit{slots}. La función \texttt{on\_btnConnect\_clicked} abre o cierra el puerto configurando baudrate, paridad y control de flujo antes de iniciar un temporizador de sondeo. Las tramas recibidas se acumulan en un \textit{buffer} circular y se validan mediante un CRC16; al ser correctas, \texttt{processFrame} extrae los valores de los ADC, entradas digitales y medidas del BMP280 para mostrarlos en los widgets. Del lado de la transmisión, \texttt{sendControlFrame} empaqueta el estado de las salidas y los registros PWM, adjunta el CRC y envía la trama por el puerto abierto.
+
+\subsection{Flujo de comunicación}
+Cuando el usuario habilita el puerto serie, la aplicación envía periódicamente una trama con el estado deseado de las salidas y los valores PWM. Al recibir una respuesta válida, se actualizan los indicadores de entradas digitales, los displays del ADC y las mediciones de temperatura y presión. El diseño desacopla la lógica de comunicación de la presentación para facilitar futuras extensiones.
+
+\section{Conclusión}
+Se desarrolló un sistema embebido basado en FreeRTOS que integra múltiples periféricos del STM32F103 y un sensor externo BMP280. La comunicación bidireccional con la PC permite monitoreo y control en tiempo real. La aplicación en Qt complementa al firmware ofreciendo una interfaz intuitiva para el usuario. El informe presente brinda una visión exhaustiva del funcionamiento y de la organización del software, sirviendo como base para tareas de mantenimiento y ampliación futura.
+
+\end{document}
+
